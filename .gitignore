@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.claude/
+CLAUDE.md
+*.json.bak
+
+# Test harness and output
+try.mts
+try.mjs
+output.json
+result.json
+raw-dump.json
