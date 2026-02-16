@@ -88,11 +88,17 @@ export class TimeoutError extends AdvalidationError {
   }
 }
 
-/** Thrown when the API rate-limits requests after multiple retries. @see {@link AdvalidationError} */
+/** Thrown when the API rate-limits requests after exhausting all retries. @see {@link AdvalidationError} */
 export class RateLimitError extends AdvalidationError {
-  constructor() {
-    super("Rate limited after multiple retries");
+  /** Number of retry attempts made before giving up. */
+  public readonly attempts: number;
+
+  constructor(attempts: number) {
+    super(
+      `Rate limited after ${attempts} retries. The API allows ~60 requests per minute per IP. Reduce concurrency or add delays between calls.`,
+    );
     this.name = "RateLimitError";
+    this.attempts = attempts;
   }
 }
 

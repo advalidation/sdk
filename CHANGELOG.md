@@ -1,16 +1,18 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- **Shared request gate** — all requests from one `Advalidation` instance serialize through a single lock, preventing concurrent bursts that would instantly exhaust the API's 15-request bucket.
+- **Proactive backpressure** — reads `X-RateLimit-IPRemaining` from API responses; when tokens run low, inserts 1s delays between requests to match the server's refill rate. Prevents 429s before they happen.
+- **Jittered 429 retry** — if rate-limited despite backpressure (e.g. multiple processes sharing an IP), retries with linear backoff and full jitter, up to 5 attempts.
+- `RateLimitError` now includes an `attempts` property and an actionable error message.
+
+### Fixed
+
+- Ignored the broken `Retry-After` header (always sends `15`, the bucket size, not actual wait seconds). Previous behavior would sleep exactly 15s on every 429 and retry simultaneously — classic thundering herd.
+
 ## 1.0.0
 
-Initial release.
-
-- Single-call validation: `client.validate()` handles the full workflow (resolve adspec, create campaign, upload, poll, build result)
-- Summary and detailed result modes
-- Fetch existing results with `client.getResults()`
-- Three creative input types: URL, tag, file
-- Target by campaign ID, adspec ID, or type
-- Verbose progress output to stderr
-- Detailed test tree output for VAST with variations and media files
-- Error hierarchy: AuthenticationError, ApiError, InputError, TimeoutError, RateLimitError, ScanFailedError, ScanCancelledError, AbortError
-- Dual output: ESM + CommonJS
-- Zero runtime dependencies, requires Node >= 18
+Initial public release.

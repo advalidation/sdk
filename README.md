@@ -216,7 +216,7 @@ Creating campaign... (id: 199546) (88ms)
 Uploading creative... (url) (112ms)
 Polling for results... (attempt 1, status: processing)
 Polling for results... (attempt 2, status: finished)
-Done. 32 issues found. https://app.advalidation.com/share/abc123 — 5 requests, total: (26.1s)
+Done. 32 issues found. https://app2.advalidation.io/share/abc123 — 5 requests, total: (26.1s)
 ```
 
 With `details: true`, the full test tree is included. Here's a real VAST creative with 2 variations and 11 renditions each:
@@ -267,7 +267,7 @@ All errors extend `AdvalidationError`.
 | `AuthenticationError`| API returns 401 (invalid or missing API key).                |
 | `InputError`         | Invalid parameters (missing input, both `spec` and `type` provided, etc). |
 | `ApiError`           | API returns a non-401 error. Has `status` and `body` properties. |
-| `RateLimitError`     | API returned 429 repeatedly (after 3 retries with backoff).  |
+| `RateLimitError`     | Rate limited after 5 retries with jittered backoff. The API allows ~60 req/min per IP. Has `attempts` property. |
 | `ScanFailedError`    | The scan finished with a `failed` status.                    |
 | `ScanCancelledError` | The scan was cancelled.                                      |
 | `TimeoutError`       | Scan did not complete within the timeout period.             |

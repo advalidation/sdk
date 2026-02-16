@@ -1,38 +1,32 @@
 import { AuthenticationError, ApiError, RateLimitError } from "./errors.js";
 import { sleep } from "./sleep.js";
+import { RequestGate } from "./request-gate.js";
 
-const RETRY_DELAYS = [1_000, 2_000, 4_000];
+const RATE_LIMIT = {
+  baseDelayMs: 1_000,
+  maxDelayMs: 5_000,
+  maxRetries: 5,
+};
 
 export interface HttpClientOptions {
   apiKey: string;
   baseUrl: string;
   signal?: AbortSignal;
+  gate?: RequestGate;
 }
 
 export class HttpClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly signal?: AbortSignal;
-  private lock: Promise<void> = Promise.resolve();
+  private readonly gate: RequestGate;
   private _requestCount = 0;
 
   constructor(options: HttpClientOptions) {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.signal = options.signal;
-  }
-
-  private async withLock<T>(fn: () => Promise<T>): Promise<T> {
-    let release: () => void;
-    const next = new Promise<void>((r) => (release = r));
-    const prev = this.lock;
-    this.lock = next;
-    await prev;
-    try {
-      return await fn();
-    } finally {
-      release!();
-    }
+    this.gate = options.gate ?? new RequestGate();
   }
 
   async get<T>(path: string): Promise<T> {
@@ -70,7 +64,7 @@ export class HttpClient {
     path: string,
     init: RequestInit,
   ): Promise<unknown> {
-    return this.withLock(async () => {
+    return this.gate.run(async () => {
       const url = `${this.baseUrl}${path}`;
 
       const headers = new Headers(init.headers);
@@ -85,11 +79,16 @@ export class HttpClient {
         });
 
         if (response.status === 429) {
-          if (attempt >= RETRY_DELAYS.length) {
-            throw new RateLimitError();
+          this.gate.activateBackoff();
+          if (attempt >= RATE_LIMIT.maxRetries) {
+            throw new RateLimitError(RATE_LIMIT.maxRetries);
           }
-          const jitter = Math.random() * RETRY_DELAYS[attempt];
-          await sleep(RETRY_DELAYS[attempt] + jitter, this.signal);
+          const maxDelay = Math.min(
+            RATE_LIMIT.baseDelayMs * (attempt + 1),
+            RATE_LIMIT.maxDelayMs,
+          );
+          const delay = Math.random() * maxDelay;
+          await sleep(delay, this.signal);
           continue;
         }
 
@@ -107,10 +106,11 @@ export class HttpClient {
           throw new ApiError(response.status, body);
         }
 
+        this.gate.updateFromHeaders(response.headers);
         this._requestCount++;
         return response.json();
       }
-    });
+    }, this.signal);
   }
 
   get requestCount(): number {

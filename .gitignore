@@ -5,6 +5,9 @@ dist/
 CLAUDE.md
 *.json.bak
 
+# Manual/internal test scripts
+test/manual/
+
 # Test harness and output
 try.mts
 try.mjs

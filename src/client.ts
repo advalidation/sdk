@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { HttpClient } from "./http.js";
+import { RequestGate } from "./request-gate.js";
 import { InputError, AbortError } from "./errors.js";
 import { pollUntilDone } from "./polling.js";
 import { buildResult } from "./result-builder.js";
@@ -42,6 +43,7 @@ interface AdvalidationOptions {
 export class Advalidation {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly gate = new RequestGate();
 
   /**
    * API key can also be set via the `ADVALIDATION_API_KEY` environment variable.
@@ -90,6 +92,7 @@ export class Advalidation {
       apiKey: this.apiKey,
       baseUrl: `${this.baseUrl}/v2`,
       signal,
+      gate: this.gate,
     });
 
     let campaignId: number;
@@ -169,6 +172,7 @@ export class Advalidation {
     const http = new HttpClient({
       apiKey: this.apiKey,
       baseUrl: `${this.baseUrl}/v2`,
+      gate: this.gate,
     });
 
     let t = Date.now();
