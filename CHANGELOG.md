@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2
+
+### Fixed
+
+- **Repository URL** — corrected `package.json` repository URL to point to the public repo.
+
 ## 1.2.1
 
 ### Fixed
