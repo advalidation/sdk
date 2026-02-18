@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+### Added
+
+- **`data` input type** — pass a `Buffer` or `Uint8Array` directly to `validate()` instead of a file path. Useful when you already have bytes in memory (from S3, a database, HTTP response, etc.). Optional `fileName` sets the server-side filename.
+
 ## 1.1.0
 
 ### Added

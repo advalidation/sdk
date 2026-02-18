@@ -121,7 +121,7 @@ export class Advalidation {
     }
 
     t = Date.now();
-    const inputType = "url" in creative && creative.url ? "url" : "file" in creative && creative.file ? "file" : "tag";
+    const inputType = "url" in creative && creative.url ? "url" : "file" in creative && creative.file ? "file" : "data" in creative && creative.data ? "data" : "tag";
     const creativeResponse = await uploadCreative(http, campaignId, creative);
     log?.(`Uploading creative... (${inputType}) ${ms(t)}`);
 
@@ -210,19 +210,25 @@ export class Advalidation {
 // --- Parameter validation ---
 
 function validateParams(input: ValidateInput): void {
-  const inputKeys = (["url", "file", "tag"] as const).filter(
+  const inputKeys = (["url", "file", "tag", "data"] as const).filter(
     (k) => input[k] !== undefined,
   );
 
   if (inputKeys.length === 0) {
     throw new InputError(
-      "Creative input is required. Provide one of: { url }, { file }, or { tag }.",
+      "Creative input is required. Provide one of: { url }, { file }, { tag }, or { data }.",
     );
   }
 
   if (inputKeys.length > 1) {
     throw new InputError(
-      "Only one creative input allowed. Provide exactly one of: { url }, { file }, or { tag }.",
+      "Only one creative input allowed. Provide exactly one of: { url }, { file }, { tag }, or { data }.",
+    );
+  }
+
+  if ("data" in input && input.data !== undefined && !(input.data instanceof Uint8Array)) {
+    throw new InputError(
+      "The 'data' field must be a Buffer or Uint8Array.",
     );
   }
 
@@ -327,7 +333,7 @@ async function createCampaign(
 async function uploadCreative(
   http: HttpClient,
   campaignId: number,
-  input: { url?: string; file?: string; tag?: string },
+  input: { url?: string; file?: string; tag?: string; data?: Buffer | Uint8Array; fileName?: string },
 ): Promise<ApiCreative> {
   const path = `/campaigns/${campaignId}/creatives`;
 
@@ -347,6 +353,20 @@ async function uploadCreative(
       fileBuffer,
       "application/octet-stream",
       { "X-Filename": fileName },
+    );
+    return response.data[0];
+  }
+
+  if (input.data) {
+    const headers: Record<string, string> = {};
+    if (input.fileName) {
+      headers["X-Filename"] = input.fileName;
+    }
+    const response = await http.post<ApiListResponse<ApiCreative>>(
+      path,
+      input.data,
+      "application/octet-stream",
+      headers,
     );
     return response.data[0];
   }
@@ -374,7 +394,7 @@ function buildSummaryResult(creative: ApiCreative): ValidationResult {
 
 // --- Helpers ---
 
-function generateCampaignName(input: { url?: string; file?: string; tag?: string }): string {
+function generateCampaignName(input: { url?: string; file?: string; tag?: string; data?: Buffer | Uint8Array; fileName?: string }): string {
   const date = new Date().toISOString().split("T")[0];
   let summary = "unknown";
 
@@ -385,6 +405,8 @@ function generateCampaignName(input: { url?: string; file?: string; tag?: string
   } else if ("tag" in input && input.tag) {
     summary =
       input.tag.length > 60 ? input.tag.substring(0, 60) + "..." : input.tag;
+  } else if ("data" in input && input.data) {
+    summary = input.fileName ?? "binary upload";
   }
 
   return `SDK validation - ${summary} - ${date}`;

@@ -405,6 +405,89 @@ describe("Advalidation", () => {
     });
   });
 
+  describe("validate() data input", () => {
+    const client = new Advalidation({ apiKey: API_KEY });
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("sends Buffer as application/octet-stream with X-Filename", async () => {
+      setupHappyPath();
+      const buf = Buffer.from("fake-video-data");
+
+      const promise = client.validate({
+        data: buf,
+        fileName: "test.mp4",
+        spec: "42",
+        timeout: 60_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await promise;
+
+      const creativeCall = mockFetch.mock.calls.find(
+        (c: unknown[]) => (c[0] as string).includes("/creatives") && (c[1] as RequestInit).method === "POST",
+      );
+      const init = creativeCall![1] as RequestInit;
+      expect(init.headers.get("Content-Type")).toBe("application/octet-stream");
+      expect(init.headers.get("X-Filename")).toBe("test.mp4");
+      expect(init.body).toBe(buf);
+    });
+
+    it("sends Uint8Array as binary", async () => {
+      setupHappyPath();
+      const bytes = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+
+      const promise = client.validate({
+        data: bytes,
+        fileName: "pixels.bin",
+        spec: "42",
+        timeout: 60_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await promise;
+
+      const creativeCall = mockFetch.mock.calls.find(
+        (c: unknown[]) => (c[0] as string).includes("/creatives") && (c[1] as RequestInit).method === "POST",
+      );
+      const init = creativeCall![1] as RequestInit;
+      expect(init.headers.get("Content-Type")).toBe("application/octet-stream");
+      expect(init.body).toBe(bytes);
+    });
+
+    it("omits X-Filename header when fileName not provided", async () => {
+      setupHappyPath();
+      const buf = Buffer.from("fake-data");
+
+      const promise = client.validate({
+        data: buf,
+        spec: "42",
+        timeout: 60_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await promise;
+
+      const creativeCall = mockFetch.mock.calls.find(
+        (c: unknown[]) => (c[0] as string).includes("/creatives") && (c[1] as RequestInit).method === "POST",
+      );
+      const init = creativeCall![1] as RequestInit;
+      expect(init.headers.has("X-Filename")).toBe(false);
+    });
+
+    it("throws InputError when data is not a Buffer or Uint8Array", async () => {
+      await expect(
+        client.validate({ data: "not-binary" as any, spec: "42" }),
+      ).rejects.toThrow(InputError);
+    });
+  });
+
   describe("validate() authentication", () => {
     const client = new Advalidation({ apiKey: "bad-key" });
 

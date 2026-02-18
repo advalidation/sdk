@@ -1,9 +1,10 @@
 // --- Input types ---
 
 type CreativeInput =
-  | { url: string; file?: never; tag?: never }
-  | { file: string; url?: never; tag?: never }
-  | { tag: string; url?: never; file?: never };
+  | { url: string; file?: never; tag?: never; data?: never; fileName?: never }
+  | { file: string; url?: never; tag?: never; data?: never; fileName?: never }
+  | { tag: string; url?: never; file?: never; data?: never; fileName?: never }
+  | { data: Buffer | Uint8Array; fileName?: string; url?: never; file?: never; tag?: never };
 
 interface ValidateOptions {
   /** Ad specification ID - determines type and thresholds */
@@ -40,7 +41,7 @@ interface ValidateOptions {
 /**
  * Input for {@link Advalidation.validate}.
  *
- * Combines exactly one creative source (`url`, `file`, or `tag`) with
+ * Combines exactly one creative source (`url`, `file`, `tag`, or `data`) with
  * exactly one targeting option (`spec`, `type`, or `campaign`) plus
  * optional overrides for timeout, naming, and cancellation.
  */

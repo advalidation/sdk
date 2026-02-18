@@ -105,7 +105,7 @@ const detailed = await client.getResults(creativeId, { details: true });
 
 ## Creative input types
 
-Exactly one of `url`, `tag`, or `file` must be provided.
+Exactly one of `url`, `tag`, `file`, or `data` must be provided.
 
 **URL** — hosted creative, VAST XML endpoint, or ad tag URL. The file is fetched server-side by Advalidation, so there is no upload size limit.
 
@@ -123,6 +123,13 @@ await client.validate({ tag: "<script src='https://example.com/ad.js'></script>"
 
 ```ts
 await client.validate({ file: "/path/to/video.mp4", type: "video" });
+```
+
+**Data** — raw bytes as `Buffer` or `Uint8Array`. Use this when you already have the file contents in memory (e.g. from S3, a database, or an HTTP response). Optional `fileName` sets the `X-Filename` header; the API defaults to `API-Upload-{timestamp}` when omitted. Same **16 MB** upload limit as `file`.
+
+```ts
+const buffer = await fs.readFile("/path/to/video.mp4");
+await client.validate({ data: buffer, fileName: "video.mp4", type: "video" });
 ```
 
 > **Note:** The creative must match the campaign type. Uploading a video file against a `type: "display"` spec (or vice versa) will fail with an `ApiError`.
@@ -158,9 +165,11 @@ All options are passed in the same object as the creative input.
 
 | Field     | Type                       | Default   | Description                                      |
 |-----------|----------------------------|-----------|--------------------------------------------------|
-| `url`     | `string`                   | -         | URL of the hosted creative. Mutually exclusive with `file` and `tag`. |
-| `file`    | `string`                   | -         | Local file path. Mutually exclusive with `url` and `tag`. |
-| `tag`     | `string`                   | -         | Raw ad tag markup. Mutually exclusive with `url` and `file`. |
+| `url`     | `string`                   | -         | URL of the hosted creative. Mutually exclusive with `file`, `tag`, and `data`. |
+| `file`    | `string`                   | -         | Local file path. Mutually exclusive with `url`, `tag`, and `data`. |
+| `tag`     | `string`                   | -         | Raw ad tag markup. Mutually exclusive with `url`, `file`, and `data`. |
+| `data`    | `Buffer \| Uint8Array`     | -         | Raw file bytes. Mutually exclusive with `url`, `file`, and `tag`. |
+| `fileName`| `string`                   | -         | Filename sent with `data` uploads. Only used with `data`. |
 | `campaign`| `number`                   | -         | Existing campaign ID. Adspec is inherited. Mutually exclusive with `spec` and `type`. |
 | `spec`    | `string`                   | -         | Ad specification ID. Creates a new campaign. Mutually exclusive with `campaign` and `type`. |
 | `type`    | `"display" \| "video"`     | -         | Use the default ad specification for this type. Creates a new campaign. Mutually exclusive with `campaign` and `spec`. |
