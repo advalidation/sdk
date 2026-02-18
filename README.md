@@ -43,14 +43,14 @@ console.log(result.reportUrl); // link to the full visual report
 // Pass directly
 const client = new Advalidation({
   apiKey: "your-api-key",
-  baseUrl: "https://app.advalidation.com", // optional, this is the default
+  baseUrl: "https://app.advalidation.io", // optional, this is the default
 });
 
 // Or use environment variables (ADVALIDATION_API_KEY, ADVALIDATION_BASE_URL)
 const client = new Advalidation();
 ```
 
-Constructor options take precedence over environment variables.  `baseUrl` defaults to `https://app.advalidation.com`.
+Constructor options take precedence over environment variables.  `baseUrl` defaults to `https://app.advalidation.io`.
 
 ## Summary vs detailed results
 
@@ -60,7 +60,7 @@ By default, `validate()` and `getResults()` return a **summary** with pass/fail,
 const result = await client.validate({ url: "https://example.com/ad.html", type: "display" });
 console.log(result.passed);    // true
 console.log(result.issues);    // 0
-console.log(result.reportUrl); // "https://app.advalidation.com/share/..."
+console.log(result.reportUrl); // "https://app.advalidation.io/share/..."
 console.log(result.tests);     // [] (empty in summary mode)
 ```
 

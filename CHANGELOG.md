@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1
+
+### Fixed
+
+- **Default base URL** — corrected from `app.advalidation.com` to `app.advalidation.io`.
+- **Non-JSON error responses** — API errors returning HTML (e.g. 404 pages) no longer crash with `TypeError: Body is unusable`. The SDK now reads the body once as text, then tries JSON.parse.
+
 ## 1.2.0
 
 ### Added

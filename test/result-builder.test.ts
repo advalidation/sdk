@@ -15,7 +15,7 @@ function jsonResponse(data: unknown): Response {
 }
 
 function createHttpClient(): HttpClient {
-  return new HttpClient({ apiKey: "test-key", baseUrl: "https://app.advalidation.com/v2" });
+  return new HttpClient({ apiKey: "test-key", baseUrl: "https://app.advalidation.io/v2" });
 }
 
 // --- Fixtures ---

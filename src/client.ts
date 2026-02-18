@@ -17,14 +17,14 @@ import type {
 } from "./types.js";
 
 const DEFAULT_TIMEOUT = 300_000;
-const DEFAULT_BASE_URL = "https://app.advalidation.com";
+const DEFAULT_BASE_URL = "https://app.advalidation.io";
 
 interface AdvalidationOptions {
   /** API key for authentication. Falls back to `ADVALIDATION_API_KEY` env var. */
   apiKey?: string;
   /**
-   * Base URL of the Advalidation instance (e.g. `https://app.advalidation.com`).
-   * Falls back to `ADVALIDATION_BASE_URL` env var, then the default `https://app.advalidation.com`.
+   * Base URL of the Advalidation instance (e.g. `https://app.advalidation.io`).
+   * Falls back to `ADVALIDATION_BASE_URL` env var, then the default `https://app.advalidation.io`.
    * The SDK appends `/v2` internally — provide the app URL only.
    */
   baseUrl?: string;

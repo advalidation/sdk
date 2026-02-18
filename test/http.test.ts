@@ -210,5 +210,28 @@ describe("HttpClient", () => {
 
       await expect(http.get("/test")).rejects.toThrow(ApiError);
     });
+
+    it("handles non-JSON error body without crashing", async () => {
+      mockFetch.mockResolvedValue(
+        new Response("<html>404 Not Found</html>", {
+          status: 404,
+          headers: { "Content-Type": "text/html" },
+        }),
+      );
+
+      const http = new HttpClient({
+        apiKey: "test-key",
+        baseUrl: "https://example.com/v2",
+      });
+
+      try {
+        await http.get("/test");
+        expect.unreachable("should have thrown");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+        expect((err as ApiError).body).toBe("<html>404 Not Found</html>");
+      }
+    });
   });
 });

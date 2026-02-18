@@ -1,6 +1,6 @@
 {
   "name": "advalidation",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Validate display ads, video, and VAST tags against ad specifications",
   "type": "module",
   "exports": {

@@ -588,7 +588,7 @@ describe("Advalidation", () => {
       await promise;
 
       const urls = mockFetch.mock.calls.map((c: unknown[]) => c[0] as string);
-      expect(urls.every((u) => u.startsWith("https://app.advalidation.com/v2/"))).toBe(true);
+      expect(urls.every((u) => u.startsWith("https://app.advalidation.io/v2/"))).toBe(true);
     });
 
     it("uses constructor baseUrl over env var and default", async () => {
