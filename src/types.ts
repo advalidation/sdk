@@ -47,6 +47,66 @@ interface ValidateOptions {
  */
 export type ValidateInput = CreativeInput & ValidateOptions;
 
+interface SubmitOptions {
+  /** Ad specification ID - determines type and thresholds */
+  spec?: string;
+  /** Use the default ad specification for this type */
+  type?: "display" | "video";
+  /** Existing campaign ID — skip campaign creation, adspec is inherited from the campaign */
+  campaign?: number;
+  /** Campaign name (auto-generated if omitted) */
+  name?: string;
+  /** Standard AbortSignal for cancellation */
+  signal?: AbortSignal;
+  /** Log progress to console (default: false) */
+  verbose?: boolean;
+}
+
+/**
+ * Input for {@link Advalidation.submit}.
+ *
+ * Same creative and targeting options as {@link ValidateInput}, but without
+ * `timeout` and `details` (no polling is performed).
+ *
+ * @example
+ * const { creativeId } = await client.submit({
+ *   url: 'https://example.com/vast.xml',
+ *   type: 'video',
+ * });
+ */
+export type SubmitInput = CreativeInput & SubmitOptions;
+
+/**
+ * Result of {@link Advalidation.submit} — the IDs needed to poll with {@link Advalidation.getResults}.
+ */
+export interface SubmitResult {
+  /** Campaign the creative was uploaded to. */
+  campaignId: number;
+  /** Creative that was submitted for scanning. */
+  creativeId: number;
+}
+
+/**
+ * Discriminated union returned by {@link Advalidation.getResults}.
+ *
+ * Check the `status` field before accessing result properties:
+ * - `"finished"` — scan complete, all {@link ValidationResult} fields are available.
+ * - `"pending"` — scan is queued or in progress, poll again later.
+ * - `"failed"` — scan failed (server-side error).
+ * - `"cancelled"` — scan was cancelled.
+ *
+ * @example
+ * const response = await client.getResults(creativeId);
+ * if (response.status === 'finished') {
+ *   console.log(response.passed, response.issues);
+ * }
+ */
+export type GetResultsResponse =
+  | { status: "pending"; creativeId: number }
+  | { status: "failed"; creativeId: number }
+  | { status: "cancelled"; creativeId: number }
+  | (ValidationResult & { status: "finished" });
+
 // --- Result types ---
 
 /**

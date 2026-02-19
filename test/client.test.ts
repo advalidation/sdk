@@ -569,6 +569,174 @@ describe("Advalidation", () => {
     });
   });
 
+  describe("submit()", () => {
+    const client = new Advalidation({ apiKey: API_KEY });
+
+    it("resolves adspec, creates campaign, uploads creative, returns IDs", async () => {
+      setupHappyPath();
+
+      const result = await client.submit({
+        url: "https://example.com/ad.html",
+        spec: "42",
+      });
+
+      expect(result.campaignId).toBe(100);
+      expect(result.creativeId).toBe(200);
+
+      // Should NOT have polled for results
+      const getCalls = mockFetch.mock.calls.filter(
+        (c: unknown[]) => (c[0] as string).match(/\/creatives\/\d+$/) && (c[1] as RequestInit).method === "GET",
+      );
+      expect(getCalls).toHaveLength(0);
+    });
+
+    it("uses existing campaign and skips creation", async () => {
+      mockFetch.mockImplementation((url: string, init: RequestInit) => {
+        const path = new URL(url).pathname;
+
+        if (path === "/v2/campaigns/100" && init.method === "GET") {
+          return Promise.resolve(jsonResponse(CAMPAIGN_RESPONSE));
+        }
+        if (path.includes("/creatives") && init.method === "POST") {
+          return Promise.resolve(jsonResponse(CREATIVE_UPLOAD_RESPONSE));
+        }
+
+        return Promise.resolve(jsonResponse({ error: "not found" }, 404));
+      });
+
+      const result = await client.submit({
+        url: "https://example.com/ad.html",
+        campaign: 100,
+      });
+
+      expect(result.campaignId).toBe(100);
+      expect(result.creativeId).toBe(200);
+
+      // Should NOT have called POST /campaigns
+      const campaignPostCalls = mockFetch.mock.calls.filter(
+        (c: unknown[]) => {
+          const path = new URL(c[0] as string).pathname;
+          return path === "/v2/campaigns" && (c[1] as RequestInit).method === "POST";
+        },
+      );
+      expect(campaignPostCalls).toHaveLength(0);
+    });
+
+    it("logs progress when verbose is true", async () => {
+      setupHappyPath();
+      const stderrSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await client.submit({
+        url: "https://example.com/ad.html",
+        spec: "42",
+        verbose: true,
+      });
+
+      expect(stderrSpy).toHaveBeenCalled();
+      const messages = stderrSpy.mock.calls.map((c) => c[0]);
+      expect(messages.some((m: string) => m.includes("Resolving ad specification"))).toBe(true);
+      expect(messages.some((m: string) => m.includes("Uploading creative"))).toBe(true);
+      expect(messages.some((m: string) => m.includes("Submitted"))).toBe(true);
+
+      stderrSpy.mockRestore();
+    });
+
+    it("throws InputError for invalid params", async () => {
+      await expect(
+        client.submit({ spec: "42" } as any),
+      ).rejects.toThrow(InputError);
+    });
+  });
+
+  describe("getResults() status-aware", () => {
+    const client = new Advalidation({ apiKey: API_KEY });
+
+    it("returns pending when scan is in progress", async () => {
+      mockFetch.mockResolvedValue(
+        jsonResponse({
+          data: {
+            ...CREATIVE_UPLOAD_RESPONSE.data[0],
+            latestScanStatus: {
+              ...CREATIVE_UPLOAD_RESPONSE.data[0].latestScanStatus,
+              processingStatus: "processing",
+            },
+          },
+        }),
+      );
+
+      const result = await client.getResults(200);
+      expect(result.status).toBe("pending");
+      expect(result.creativeId).toBe(200);
+      expect("passed" in result).toBe(false);
+    });
+
+    it("returns pending when latestScanStatus is null", async () => {
+      mockFetch.mockResolvedValue(
+        jsonResponse({
+          data: {
+            ...CREATIVE_UPLOAD_RESPONSE.data[0],
+            latestScanStatus: null,
+          },
+        }),
+      );
+
+      const result = await client.getResults(200);
+      expect(result.status).toBe("pending");
+      expect(result.creativeId).toBe(200);
+    });
+
+    it("returns failed when scan failed", async () => {
+      mockFetch.mockResolvedValue(
+        jsonResponse({
+          data: {
+            ...CREATIVE_UPLOAD_RESPONSE.data[0],
+            latestScanStatus: {
+              ...CREATIVE_UPLOAD_RESPONSE.data[0].latestScanStatus,
+              processingStatus: "failed",
+            },
+          },
+        }),
+      );
+
+      const result = await client.getResults(200);
+      expect(result.status).toBe("failed");
+      expect(result.creativeId).toBe(200);
+      expect("passed" in result).toBe(false);
+    });
+
+    it("returns cancelled when scan was cancelled", async () => {
+      mockFetch.mockResolvedValue(
+        jsonResponse({
+          data: {
+            ...CREATIVE_UPLOAD_RESPONSE.data[0],
+            latestScanStatus: {
+              ...CREATIVE_UPLOAD_RESPONSE.data[0].latestScanStatus,
+              processingStatus: "cancelled",
+            },
+          },
+        }),
+      );
+
+      const result = await client.getResults(200);
+      expect(result.status).toBe("cancelled");
+      expect(result.creativeId).toBe(200);
+      expect("passed" in result).toBe(false);
+    });
+
+    it("returns finished with result fields when scan is done", async () => {
+      setupHappyPath();
+
+      const result = await client.getResults(200);
+      expect(result.status).toBe("finished");
+      expect(result.creativeId).toBe(200);
+      if (result.status === "finished") {
+        expect(result.passed).toBe(true);
+        expect(result.issues).toBe(0);
+        expect(result.reportUrl).toBe("https://example.com/creative");
+      }
+    });
+  });
+
   describe("constructor baseUrl resolution", () => {
     beforeEach(() => {
       vi.useFakeTimers();

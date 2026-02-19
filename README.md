@@ -79,13 +79,15 @@ console.log(result.mediaFiles); // VAST media files with their tests
 You can also start with a summary and fetch details later using `getResults()`:
 
 ```ts
-// Fast CI gate — summary only
+// Fast CI gate -- summary only
 const summary = await client.validate({ url: "https://example.com/ad.html", type: "display" });
 
 if (!summary.passed) {
   // Fetch full details for the failure report
   const detailed = await client.getResults(summary.creativeId, { details: true });
-  console.log(detailed.tests);
+  if (detailed.status === "finished") {
+    console.log(detailed.tests);
+  }
 }
 ```
 
@@ -94,14 +96,51 @@ if (!summary.passed) {
 Already have a creative ID from a previous run or the Advalidation UI? Skip the upload and poll:
 
 ```ts
-const result = await client.getResults(creativeId);
+const response = await client.getResults(creativeId);
+
+if (response.status === "finished") {
+  console.log(response.passed, response.issues, response.reportUrl);
+} else {
+  console.log(response.status); // "pending", "failed", or "cancelled"
+}
+
+// Full test breakdown (only available when finished)
 const detailed = await client.getResults(creativeId, { details: true });
+if (detailed.status === "finished") {
+  console.log(detailed.tests);
+}
 ```
+
+`getResults()` returns a discriminated union -- check `status` before accessing result fields. See [Result shape](#result-shape) for the full type.
 
 | Option    | Type      | Default | Description                                      |
 |-----------|-----------|---------|--------------------------------------------------|
 | `verbose` | `boolean` | `false` | Log progress to console.                         |
-| `details` | `boolean` | `false` | Fetch full test breakdown including VAST variations and media files. |
+| `details` | `boolean` | `false` | Fetch full test breakdown including VAST variations and media files. Only applies when status is `"finished"`. |
+
+## Serverless / split workflow
+
+`validate()` bundles upload + polling in a single long-running call. In serverless environments (Vercel, AWS Lambda, Cloudflare Workers) the function may timeout before the scan completes. Use `submit()` + `getResults()` to split the workflow across separate requests.
+
+```ts
+// Request 1: submit the creative (fast -- no polling)
+const { creativeId } = await client.submit({
+  url: "https://example.com/vast.xml",
+  type: "video",
+});
+
+// Store creativeId (database, KV, cookie, query param, etc.)
+
+// Request 2+: poll from separate short-lived requests
+const response = await client.getResults(creativeId);
+if (response.status === "finished") {
+  console.log(response.passed, response.issues);
+} else if (response.status === "pending") {
+  // Not done yet -- try again in a few seconds
+}
+```
+
+`submit()` accepts the same creative and targeting options as `validate()`, minus `timeout` and `details` (irrelevant without polling).
 
 ## Creative input types
 
@@ -161,25 +200,48 @@ await client.validate({ url: "https://example.com/ad.html", type: "video" });
 
 ## Options reference
 
-All options are passed in the same object as the creative input.
+All options are passed in the same object as the creative input. `submit()` accepts the same options as `validate()` except `timeout` and `details`.
 
-| Field     | Type                       | Default   | Description                                      |
-|-----------|----------------------------|-----------|--------------------------------------------------|
-| `url`     | `string`                   | -         | URL of the hosted creative. Mutually exclusive with `file`, `tag`, and `data`. |
-| `file`    | `string`                   | -         | Local file path. Mutually exclusive with `url`, `tag`, and `data`. |
-| `tag`     | `string`                   | -         | Raw ad tag markup. Mutually exclusive with `url`, `file`, and `data`. |
-| `data`    | `Buffer \| Uint8Array`     | -         | Raw file bytes. Mutually exclusive with `url`, `file`, and `tag`. |
-| `fileName`| `string`                   | -         | Filename sent with `data` uploads. Only used with `data`. |
-| `campaign`| `number`                   | -         | Existing campaign ID. Adspec is inherited. Mutually exclusive with `spec` and `type`. |
-| `spec`    | `string`                   | -         | Ad specification ID. Creates a new campaign. Mutually exclusive with `campaign` and `type`. |
-| `type`    | `"display" \| "video"`     | -         | Use the default ad specification for this type. Creates a new campaign. Mutually exclusive with `campaign` and `spec`. |
-| `name`    | `string`                   | auto      | Campaign name. Auto-generated from the input if omitted. |
-| `timeout` | `number`                   | `300000`  | Polling timeout in milliseconds (default 5 minutes). |
-| `signal`  | `AbortSignal`              | -         | Standard `AbortSignal` for cancellation.         |
-| `verbose` | `boolean`                  | `false`   | Log progress messages to console.                |
-| `details` | `boolean`                  | `false`   | Fetch full test breakdown including VAST variations and media files. |
+| Field     | Type                       | Default   | `validate` | `submit` | Description                                      |
+|-----------|----------------------------|-----------|:----------:|:--------:|--------------------------------------------------|
+| `url`     | `string`                   | -         | x | x | URL of the hosted creative. Mutually exclusive with `file`, `tag`, and `data`. |
+| `file`    | `string`                   | -         | x | x | Local file path. Mutually exclusive with `url`, `tag`, and `data`. |
+| `tag`     | `string`                   | -         | x | x | Raw ad tag markup. Mutually exclusive with `url`, `file`, and `data`. |
+| `data`    | `Buffer \| Uint8Array`     | -         | x | x | Raw file bytes. Mutually exclusive with `url`, `file`, and `tag`. |
+| `fileName`| `string`                   | -         | x | x | Filename sent with `data` uploads. Only used with `data`. |
+| `campaign`| `number`                   | -         | x | x | Existing campaign ID. Adspec is inherited. Mutually exclusive with `spec` and `type`. |
+| `spec`    | `string`                   | -         | x | x | Ad specification ID. Creates a new campaign. Mutually exclusive with `campaign` and `type`. |
+| `type`    | `"display" \| "video"`     | -         | x | x | Use the default ad specification for this type. Creates a new campaign. Mutually exclusive with `campaign` and `spec`. |
+| `name`    | `string`                   | auto      | x | x | Campaign name. Auto-generated from the input if omitted. |
+| `timeout` | `number`                   | `300000`  | x | - | Polling timeout in milliseconds (default 5 minutes). |
+| `signal`  | `AbortSignal`              | -         | x | x | Standard `AbortSignal` for cancellation.         |
+| `verbose` | `boolean`                  | `false`   | x | x | Log progress messages to console.                |
+| `details` | `boolean`                  | `false`   | x | - | Fetch full test breakdown including VAST variations and media files. |
 
 ## Result shape
+
+`validate()` returns `ValidationResult` directly (polling guarantees a finished scan).
+
+`getResults()` returns `GetResultsResponse` -- a discriminated union:
+
+```ts
+type GetResultsResponse =
+  | { status: "pending"; creativeId: number }
+  | { status: "failed"; creativeId: number }
+  | { status: "cancelled"; creativeId: number }
+  | (ValidationResult & { status: "finished" });
+```
+
+`submit()` returns `SubmitResult`:
+
+```ts
+interface SubmitResult {
+  campaignId: number;
+  creativeId: number;
+}
+```
+
+`ValidationResult` (returned by `validate()` and embedded in `GetResultsResponse` when finished):
 
 ```ts
 interface ValidationResult {

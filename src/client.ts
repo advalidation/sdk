@@ -7,6 +7,9 @@ import { pollUntilDone } from "./polling.js";
 import { buildResult } from "./result-builder.js";
 import type {
   ValidateInput,
+  SubmitInput,
+  SubmitResult,
+  GetResultsResponse,
   ValidationResult,
   AdSpec,
   ApiAdSpecification,
@@ -147,22 +150,112 @@ export class Advalidation {
   }
 
   /**
+   * Upload a creative for scanning without waiting for results.
+   *
+   * Runs steps 1-3 of the workflow (resolve adspec, create campaign, upload creative)
+   * and returns the IDs needed to poll with {@link getResults}. Use this in serverless
+   * or time-constrained environments where the full {@link validate} flow may exceed
+   * the function timeout.
+   *
+   * @example
+   * // Request 1: submit (fast -- no polling)
+   * const { creativeId } = await client.submit({
+   *   url: 'https://example.com/vast.xml',
+   *   type: 'video',
+   * });
+   *
+   * // Request 2+: poll from separate short-lived requests
+   * const response = await client.getResults(creativeId);
+   * if (response.status === 'finished') {
+   *   console.log(response.passed, response.issues);
+   * }
+   *
+   * @see getResults
+   */
+  async submit(input: SubmitInput): Promise<SubmitResult> {
+    validateParams(input);
+
+    const { signal, name, spec, type, campaign, verbose, ...creative } = input;
+    const totalStart = Date.now();
+    const log = verbose
+      ? (msg: string) => console.error(msg)
+      : undefined;
+
+    if (signal?.aborted) {
+      throw new AbortError();
+    }
+
+    const http = new HttpClient({
+      apiKey: this.apiKey,
+      baseUrl: `${this.baseUrl}/v2`,
+      signal,
+      gate: this.gate,
+    });
+
+    let campaignId: number;
+    let t = Date.now();
+
+    if (campaign) {
+      const existing = await fetchCampaign(http, campaign);
+      campaignId = existing.id;
+      log?.(`Using existing campaign ${campaignId} ${ms(t)}`);
+    } else {
+      const adspec = await resolveAdSpec(http, { spec, type });
+      log?.(`Resolving ad specification... (${spec ? `id: ${spec}` : `type: ${type}`}) -> "${adspec.name}" (${adspec.tests.length} tests) ${ms(t)}`);
+
+      t = Date.now();
+      const campaignName = name ?? generateCampaignName(creative);
+      const newCampaign = await createCampaign(
+        http,
+        campaignName,
+        adspec.type,
+        adspec.id,
+      );
+      campaignId = newCampaign.id;
+      log?.(`Creating campaign... (id: ${campaignId}) ${ms(t)}`);
+    }
+
+    t = Date.now();
+    const inputType = "url" in creative && creative.url ? "url" : "file" in creative && creative.file ? "file" : "data" in creative && creative.data ? "data" : "tag";
+    const creativeResponse = await uploadCreative(http, campaignId, creative);
+    log?.(`Uploading creative... (${inputType}) ${ms(t)}`);
+
+    log?.(`Submitted. ${http.requestCount} requests, total: ${ms(totalStart)}`);
+
+    return {
+      campaignId,
+      creativeId: creativeResponse.id,
+    };
+  }
+
+  /**
    * Fetch validation results for a previously scanned creative.
    *
-   * @example
-   * // Summary (default)
-   * const result = await client.getResults(12345);
+   * Returns a discriminated union based on the scan's processing status.
+   * Check the `status` field before accessing result properties.
    *
    * @example
-   * // Full test breakdown
-   * const result = await client.getResults(12345, { details: true });
+   * const response = await client.getResults(creativeId);
+   * if (response.status === 'finished') {
+   *   console.log(response.passed, response.issues);
+   * } else if (response.status === 'pending') {
+   *   // Poll again later
+   * }
+   *
+   * @example
+   * // Full test breakdown (only available when finished)
+   * const response = await client.getResults(creativeId, { details: true });
+   * if (response.status === 'finished') {
+   *   console.log(response.tests);
+   * }
    *
    * @see validate
+   * @see submit
    */
   async getResults(
     creativeId: number,
     options?: { verbose?: boolean; details?: boolean },
-  ): Promise<ValidationResult> {
+  ): Promise<GetResultsResponse> {
     const details = options?.details ?? false;
     const totalStart = Date.now();
     const log = options?.verbose
@@ -182,11 +275,28 @@ export class Advalidation {
     const creative = creativeRes.data;
     log?.(`Fetching creative ${creativeId}... ${ms(t)}`);
 
+    const processingStatus = creative.latestScanStatus?.processingStatus;
+
+    if (processingStatus === "failed") {
+      log?.(`Scan failed. ${http.requestCount} requests, total: ${ms(totalStart)}`);
+      return { status: "failed", creativeId };
+    }
+
+    if (processingStatus === "cancelled") {
+      log?.(`Scan cancelled. ${http.requestCount} requests, total: ${ms(totalStart)}`);
+      return { status: "cancelled", creativeId };
+    }
+
+    if (processingStatus !== "finished") {
+      log?.(`Scan pending (status: ${processingStatus ?? "unknown"}). ${http.requestCount} requests, total: ${ms(totalStart)}`);
+      return { status: "pending", creativeId };
+    }
+
     if (!details) {
       const result = buildSummaryResult(creative);
       const summary = result.issues > 0 ? `${result.issues} issues found.` : "All tests passed.";
       log?.(`Done. ${summary} ${result.reportUrl} — ${http.requestCount} requests, total: ${ms(totalStart)}`);
-      return result;
+      return { status: "finished", ...result };
     }
 
     t = Date.now();
@@ -203,13 +313,13 @@ export class Advalidation {
     const result = await buildResult(http, creative, adspec, log);
     const summary = result.issues > 0 ? `${result.issues} issues found.` : "All tests passed.";
     log?.(`Done. ${summary} ${http.requestCount} requests, total: ${ms(totalStart)}`);
-    return result;
+    return { status: "finished", ...result };
   }
 }
 
 // --- Parameter validation ---
 
-function validateParams(input: ValidateInput): void {
+function validateParams(input: ValidateInput | SubmitInput): void {
   const inputKeys = (["url", "file", "tag", "data"] as const).filter(
     (k) => input[k] !== undefined,
   );

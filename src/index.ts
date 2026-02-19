@@ -2,6 +2,9 @@ export { Advalidation } from "./client.js";
 
 export type {
   ValidateInput,
+  SubmitInput,
+  SubmitResult,
+  GetResultsResponse,
   ValidationResult,
   Test,
   Variation,

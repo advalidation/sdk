@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+
+- **`submit()` method** -- split workflow that submits a creative without polling, returns `{ campaignId, creativeId }`.
+- `SubmitInput`, `SubmitResult`, `GetResultsResponse` types.
+
+### Changed
+
+- `getResults()` now returns `GetResultsResponse` (discriminated union with `status` field) instead of `ValidationResult`. Check `response.status === "finished"` before accessing result fields.
+
+### Fixed
+
+- `getResults()` no longer crashes when the scan hasn't finished (removed non-null assertion on nullable `latestScanStatus`).
+
 ## 1.2.2
 
 ### Fixed
