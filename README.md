@@ -14,10 +14,8 @@ Questions, need an API key, or want to discuss integration? Email us at [hello@a
 
 ## Install
 
-This package is not yet published to npm. Install directly from GitHub:
-
 ```
-npm install github:advalidation/sdk
+npm install advalidation
 ```
 
 ## Quick start
